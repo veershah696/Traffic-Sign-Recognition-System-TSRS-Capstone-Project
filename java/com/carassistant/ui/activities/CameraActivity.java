@@ -26,8 +26,7 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.params.StreamConfigurationMap;
-import android.location.GpsSatellite;
-import android.location.GpsStatus;
+import android.location.GnssStatus;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -74,7 +73,6 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import java.nio.ByteBuffer;
 
 import static android.Manifest.permission.ACCESS_FINE_LOCATION;
-import static android.location.GpsStatus.GPS_EVENT_SATELLITE_STATUS;
 
 public abstract class CameraActivity extends AppCompatActivity
         implements OnImageAvailableListener,
@@ -111,6 +109,7 @@ public abstract class CameraActivity extends AppCompatActivity
     private TextView threadsTextView;
 
     private LocationManager mLocationManager;
+    private boolean isGnssRegistered = false;
     double currentLon = 0;
     double currentLat = 0;
     double lastLon = 0;
@@ -338,7 +337,10 @@ public abstract class CameraActivity extends AppCompatActivity
 
     private void setupLocation(){
         mLocationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
-        mLocationManager.addGpsStatusListener(gpsStatus);
+        if (!isGnssRegistered && mLocationManager != null) {
+            mLocationManager.registerGnssStatusCallback(gnssStatusCallback);
+            isGnssRegistered = true;
+        }
         mLocationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 500, 0, locationListener);
 
         if (!mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
@@ -380,8 +382,13 @@ public abstract class CameraActivity extends AppCompatActivity
 
         super.onDestroy();
 
-        mLocationManager.removeUpdates(locationListener);
-        mLocationManager.removeGpsStatusListener(gpsStatus);
+        if (mLocationManager != null) {
+            mLocationManager.removeUpdates(locationListener);
+            if (isGnssRegistered) {
+                mLocationManager.unregisterGnssStatusCallback(gnssStatusCallback);
+                isGnssRegistered = false;
+            }
+        }
     }
 
     protected synchronized void runInBackground(final Runnable r) {
@@ -676,39 +683,34 @@ public abstract class CameraActivity extends AppCompatActivity
         }
     }
 
-    private GpsStatus.Listener gpsStatus = event -> {
-        switch (event) {
-            case GPS_EVENT_SATELLITE_STATUS:
-                @SuppressLint("MissingPermission") GpsStatus gpsStatus = mLocationManager.getGpsStatus(null);
-                int satsInView = 0;
-                int satsUsed = 0;
-                Iterable<GpsSatellite> sats = gpsStatus.getSatellites();
-                for (GpsSatellite sat : sats) {
-                    satsInView++;
-                    if (sat.usedInFix()) {
-                        satsUsed++;
-                    }
+    private GnssStatus.Callback gnssStatusCallback = new GnssStatus.Callback() {
+        @Override
+        public void onSatelliteStatusChanged(GnssStatus status) {
+            int satsInView = 0;
+            int satsUsed = 0;
+            for (int i = 0; i < status.getSatelliteCount(); i++) {
+                satsInView++;
+                if (status.usedInFix(i)) {
+                    satsUsed++;
                 }
+            }
 
-                String satellite = satsUsed + "/" + satsInView;
-                String accuracy = null;
-                String status = null;
-                if (satsUsed == 0) {
-                    accuracy = "";
-                    status = getResources().getString(R.string.waiting_for_fix);
-                }
+            String satellite = satsUsed + "/" + satsInView;
+            String accuracy = null;
+            String statusText = null;
+            if (satsUsed == 0) {
+                accuracy = "";
+                statusText = getResources().getString(R.string.waiting_for_fix);
+            }
 
-                MessageEventBus.INSTANCE.send(new EventUpdateStatus(new GpsStatusEntity(satellite, status, accuracy)));
+            MessageEventBus.INSTANCE.send(new EventUpdateStatus(new GpsStatusEntity(satellite, statusText, accuracy)));
+        }
 
-                break;
-
-            case GpsStatus.GPS_EVENT_STOPPED:
-                if (!mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    MessageEventBus.INSTANCE.send(new EventGpsDisabled());
-                }
-                break;
-            case GpsStatus.GPS_EVENT_FIRST_FIX:
-                break;
+        @Override
+        public void onStopped() {
+            if (mLocationManager != null && !mLocationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                MessageEventBus.INSTANCE.send(new EventGpsDisabled());
+            }
         }
     };
 
