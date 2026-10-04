@@ -63,10 +63,7 @@ The system detects and identifies a wide range of signs:
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
-
-##Collaborators
-Veer Shah & Shreyas Pawar partnership 
+Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixe
 
 ## 📄 License
 
