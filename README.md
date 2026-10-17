@@ -63,7 +63,7 @@ The system detects and identifies a wide range of signs:
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixe
+Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fix
 
 ## 📄 License
 
